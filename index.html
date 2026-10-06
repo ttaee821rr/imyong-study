@@ -1,0 +1,1265 @@
+<!DOCTYPE html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>임용 스터디</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&display=swap">
+<style>
+  /* layout: fixed top bar (brand + D-day + tabs) over a single scrolling main; cards stack on one column at phone width */
+  :root{
+    --bg:#f8f6f0; --surface:#ffffff; --surface-2:#fbf9f4;
+    --text:#2a2520; --muted:#8c8375; --line:#ebe6d9;
+    --accent:#2e6dc0; --accent-fg:#ffffff;
+    --urgent-bg:#fbe0d8; --urgent-fg:#c0563e;
+    --good:#3fa562;
+    --subj-edu:#2a78d6; --subj-p1:#1baf7a; --subj-p2:#eb6834;
+    --delta-up:#006300; --delta-down:#c0563e;
+    --bg-translucent:rgba(248,246,240,0.72);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      color-scheme: dark;
+      --bg:#1c1a16; --surface:#252220; --surface-2:#2c2924;
+      --text:#efe9dd; --muted:#a39a89; --line:#3a352e;
+      --accent:#8093ff; --accent-fg:#151321;
+      --urgent-bg:#3d2620; --urgent-fg:#f0a58f;
+      --good:#6cc98a;
+      --subj-edu:#3987e5; --subj-p1:#199e70; --subj-p2:#d95926;
+      --delta-up:#0ca30c; --delta-down:#f0a58f;
+      --bg-translucent:rgba(28,26,22,0.72);
+    }
+  }
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --bg:#1c1a16; --surface:#252220; --surface-2:#2c2924;
+    --text:#efe9dd; --muted:#a39a89; --line:#3a352e;
+    --accent:#8093ff; --accent-fg:#151321;
+    --urgent-bg:#3d2620; --urgent-fg:#f0a58f;
+    --good:#6cc98a;
+    --subj-edu:#3987e5; --subj-p1:#199e70; --subj-p2:#d95926;
+    --delta-up:#0ca30c; --delta-down:#f0a58f;
+    --bg-translucent:rgba(28,26,22,0.72);
+  }
+
+  *{box-sizing:border-box}
+  [hidden]{display:none !important;} /* 탭 전환이 .tab-panel의 display:flex/grid 규칙에 가려지지 않도록 명시 */
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:"Do Hyeon","IBM Plex Sans KR","Noto Sans KR",-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  #app{display:flex; flex-direction:column; height:100%; max-width:960px; margin:0 auto;}
+
+  .topbar{
+    position:sticky; top:env(safe-area-inset-top,0px); z-index:5;
+    background:var(--bg-translucent);
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    border-bottom:1px solid var(--line);
+    padding:14px 20px 0;
+  }
+  .topbar-row{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;}
+  .brand{display:flex; align-items:baseline; gap:10px; min-width:0;}
+  .brand h1{font-size:19px; font-weight:700; margin:0; letter-spacing:-0.01em;}
+  .dday-chip{
+    font-size:13px; font-weight:700; font-variant-numeric:tabular-nums;
+    background:var(--urgent-bg); color:var(--urgent-fg);
+    padding:3px 10px; border-radius:999px; white-space:nowrap;
+  }
+  .tabs{display:flex; gap:4px; margin-top:14px; overflow-x:auto;}
+  .tab-btn{
+    appearance:none; border:none; background:none; color:var(--muted);
+    font:inherit; font-size:14px; font-weight:600; padding:10px 14px;
+    border-bottom:2px solid transparent; cursor:pointer; white-space:nowrap;
+  }
+  .tab-btn[aria-selected="true"]{color:var(--text); border-bottom-color:var(--accent);}
+  .tab-btn:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+
+  main{flex:1; padding:20px; padding-bottom:calc(20px + env(safe-area-inset-bottom,0px));}
+  .tab-panel{display:flex; flex-direction:column; gap:16px;}
+
+  /* 폴더블(갤럭시 Z 폴드) 대응: 접었을 때(커버 화면)는 위 flex 1열 그대로,
+     펼쳤을 때(내부 화면, 정사각에 가까운 넓은 화면)는 카드 2열 그리드로 전환 */
+  @media (min-width:600px){
+    .tab-panel{display:grid; grid-template-columns:1fr 1fr; align-items:start; gap:16px;}
+    .tab-panel .span-2{grid-column:1 / -1;}
+  }
+  /* 대시보드는 좌/우 두 칼럼이 각자 독립적으로 쌓이는 구조(피그마 디자인 기준) */
+  .dashboard-col{display:flex; flex-direction:column; gap:16px;}
+
+  .card{
+    background:var(--surface); border:1px solid var(--line); border-radius:16px;
+    padding:20px;
+  }
+  .card h2{font-size:13px; font-weight:700; color:var(--muted); margin:0 0 4px; letter-spacing:.02em;}
+
+  .dday-card .dday-num{
+    font-size:clamp(40px,10vw,56px); font-weight:800; color:var(--accent);
+    line-height:1.05; margin:2px 0 6px; font-variant-numeric:tabular-nums;
+  }
+  .dday-card .dday-label{font-size:14px; color:var(--muted);}
+  .dday-card .dday-label b{color:var(--text); font-weight:600;}
+  .upcoming-toggle{
+    appearance:none; cursor:pointer; margin-top:14px;
+    font:inherit; font-size:13px; font-weight:700; color:var(--accent);
+    background:none; border:none; padding:0; display:flex; align-items:center; gap:4px;
+  }
+  .upcoming-toggle::after{content:'▾'; font-size:11px; transition:transform .15s ease;}
+  .upcoming-toggle[aria-expanded="true"]::after{transform:rotate(180deg);}
+
+  .upcoming-list{display:flex; flex-direction:column; gap:2px; margin-top:10px;}
+  .upcoming-item{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:12px 4px; border-top:1px solid var(--line);
+  }
+  .upcoming-item:first-child{border-top:none;}
+  .upcoming-item .name{font-size:14px; font-weight:600; min-width:0;}
+  .upcoming-item .date{font-size:12px; color:var(--muted); margin-top:2px;}
+  .upcoming-item .badge{
+    flex-shrink:0; font-size:12px; font-weight:700; font-variant-numeric:tabular-nums;
+    padding:4px 10px; border-radius:999px; background:var(--surface-2); color:var(--text);
+  }
+  .upcoming-item .badge.today{background:var(--good); color:#fff;}
+
+  .placeholder{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:6px; padding:56px 20px; color:var(--muted); text-align:center;
+  }
+  .placeholder strong{color:var(--text); font-size:15px;}
+  .placeholder span{font-size:13px;}
+
+  .today-card .today-num{
+    display:flex; align-items:baseline; gap:6px; margin:2px 0 10px;
+  }
+  .today-card .today-num .value{
+    font-size:36px; font-weight:800; font-variant-numeric:tabular-nums; line-height:1;
+  }
+  .today-card .today-num .unit{font-size:15px; color:var(--muted); font-weight:600;}
+  .progress-track{
+    height:8px; border-radius:999px; background:var(--surface-2); overflow:hidden;
+  }
+  .progress-fill{
+    height:100%; border-radius:999px; background:var(--accent);
+    transition:width .3s ease;
+  }
+  .today-card .today-sub{font-size:13px; color:var(--muted); margin-top:8px;}
+
+  .week-card .week-total{font-size:13px; color:var(--muted); margin-bottom:14px;}
+  .week-chart{display:flex; align-items:flex-end; gap:8px;}
+  .week-bar-col{flex:1; display:flex; flex-direction:column; align-items:center; gap:6px;}
+  .week-bar-track{height:84px; width:100%; display:flex; align-items:flex-end;}
+  .week-bar{width:100%; max-width:28px; border-radius:6px 6px 3px 3px; background:var(--surface-2); min-height:4px;}
+  .week-bar.today{background:var(--accent);}
+  .week-bar-value{font-size:11px; font-weight:700; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap;}
+  .week-bar-value.today{color:var(--text);}
+  .week-day-label{font-size:12px; color:var(--muted); font-weight:600;}
+  .week-day-label.today{color:var(--text);}
+
+  .card-header-row{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;}
+  .card-header-row h2{margin:0;}
+  .card-count-badge{
+    flex-shrink:0; font-size:12px; font-weight:700; font-variant-numeric:tabular-nums;
+    background:var(--surface-2); color:var(--text); padding:3px 10px; border-radius:999px;
+  }
+
+  .stopwatch-card select{
+    appearance:none; width:100%; margin-top:10px;
+    font:inherit; font-size:14px; font-weight:600; color:var(--text);
+    background:var(--surface-2); border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px;
+  }
+  .stopwatch-memo{
+    margin-top:8px; width:100%; font:inherit; font-size:14px; color:var(--text);
+    background:var(--surface-2); border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px;
+  }
+  .stopwatch-display{
+    text-align:center; font-size:40px; font-weight:800; font-variant-numeric:tabular-nums;
+    margin:20px 0 14px; letter-spacing:.02em;
+  }
+  .stopwatch-btn{
+    width:100%; appearance:none; cursor:pointer; font:inherit; font-size:15px; font-weight:700;
+    border-radius:10px; padding:13px 12px; border:1px solid var(--accent);
+    background:var(--accent); color:var(--accent-fg);
+  }
+  .stopwatch-btn[aria-pressed="true"]{background:var(--urgent-bg); border-color:var(--urgent-bg); color:var(--urgent-fg);}
+  .card-divider{height:1px; background:var(--line); margin:20px 0 16px;}
+
+  .timer-card select{
+    appearance:none; width:100%; margin-top:10px;
+    font:inherit; font-size:14px; font-weight:600; color:var(--text);
+    background:var(--surface-2); border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px;
+  }
+  .preset-row{display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;}
+  .preset-btn{
+    flex:1; min-width:84px; appearance:none; cursor:pointer;
+    font:inherit; font-size:14px; font-weight:700; color:var(--text);
+    background:var(--surface-2); border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px;
+  }
+  .preset-btn[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:var(--accent-fg);}
+  .custom-minutes{
+    margin-top:8px; width:100%; font:inherit; font-size:14px;
+    background:var(--surface-2); border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px; color:var(--text);
+  }
+  .timer-display{
+    text-align:center; font-size:44px; font-weight:800; font-variant-numeric:tabular-nums;
+    margin:22px 0 4px; letter-spacing:.02em;
+  }
+  .timer-done-msg{
+    text-align:center; font-size:13px; color:var(--good); font-weight:700; min-height:18px; margin-bottom:6px;
+  }
+  .timer-actions{display:flex; gap:8px; margin-top:10px;}
+  .timer-actions button{
+    flex:1; appearance:none; cursor:pointer; font:inherit; font-size:15px; font-weight:700;
+    border-radius:10px; padding:13px 12px; border:1px solid transparent;
+  }
+  #timer-start{background:var(--accent); color:var(--accent-fg);}
+  #timer-reset{background:var(--surface-2); color:var(--text); border-color:var(--line);}
+
+  .todo-card .todo-progress{font-size:13px; color:var(--muted); margin-bottom:14px;}
+  .todo-add-row{display:flex; gap:8px; margin-bottom:4px;}
+  .todo-input{
+    flex:1; min-width:0; font:inherit; font-size:14px; color:var(--text);
+    background:var(--surface-2); border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px;
+  }
+  .todo-subject-select{
+    flex-shrink:0; width:92px; appearance:none; font:inherit; font-size:13px; font-weight:600;
+    color:var(--text); background:var(--surface-2); border:1px solid var(--line); border-radius:10px;
+    padding:10px 6px;
+  }
+  .todo-add-btn{
+    flex-shrink:0; appearance:none; cursor:pointer; font:inherit; font-size:14px; font-weight:700;
+    color:var(--accent-fg); background:var(--accent); border:1px solid var(--accent); border-radius:10px;
+    padding:10px 16px;
+  }
+  .todo-list{display:flex; flex-direction:column; gap:2px; margin-top:12px;}
+  .todo-item{
+    display:flex; align-items:center; gap:10px;
+    padding:11px 2px; border-top:1px solid var(--line);
+  }
+  .todo-item:first-child{border-top:none;}
+  .todo-item input[type="checkbox"]{
+    flex-shrink:0; width:19px; height:19px; accent-color:var(--accent); cursor:pointer;
+  }
+  .todo-item .todo-text{flex:1; min-width:0; font-size:14px; font-weight:600; word-break:break-word;}
+  .todo-item.done .todo-text{color:var(--muted); text-decoration:line-through;}
+  .todo-item .todo-tag{
+    flex-shrink:0; font-size:11px; font-weight:700; padding:3px 8px; border-radius:999px;
+    background:var(--surface-2); color:var(--muted);
+  }
+  .todo-item .todo-del{
+    flex-shrink:0; appearance:none; cursor:pointer; border:none; background:none;
+    color:var(--muted); font-size:16px; padding:2px 4px; line-height:1;
+  }
+
+  .subjects-list{display:flex; flex-direction:column; gap:20px; margin-top:8px;}
+  .subj-row-top{display:flex; align-items:center; gap:8px;}
+  .subj-dot{width:10px; height:10px; border-radius:50%; flex-shrink:0;}
+  .subj-name{font-size:14px; font-weight:700; flex:1; min-width:0;}
+  .subj-pct{font-size:13px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--muted);}
+  .subj-sub{font-size:12px; color:var(--muted); margin-top:7px;}
+  .subj-time-big{font-size:22px; font-weight:800; font-variant-numeric:tabular-nums; flex-shrink:0; white-space:nowrap;}
+
+  .subject-stat-header{display:flex; align-items:center; gap:8px; font-size:14px; font-weight:700; margin-bottom:14px;}
+  .subject-stat-row{display:flex; gap:10px;}
+  .subject-stat-tile{flex:1; min-width:0; background:var(--surface-2); border-radius:12px; padding:14px;}
+  .subject-stat-tile .tile-label{display:block; font-size:11px; font-weight:700; color:var(--muted); margin-bottom:6px;}
+  .subject-stat-tile .tile-value{font-size:19px; font-weight:800; font-variant-numeric:tabular-nums; white-space:nowrap;}
+  .subject-stat-tile .tile-sub{font-size:11px; color:var(--muted); margin-top:4px;}
+
+  .scores-legend-dot{width:10px; height:10px; border-radius:50%; flex-shrink:0;}
+  .score-chart-header{display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:10px;}
+  .score-chart-title{display:flex; align-items:center; gap:8px; font-size:14px; font-weight:700; color:var(--text);}
+  .score-chart-headline{font-size:22px; font-weight:800; font-variant-numeric:tabular-nums; display:flex; align-items:baseline; gap:5px;}
+  .score-chart-headline .headline-delta{font-size:12px; font-weight:700; color:var(--delta-up);}
+  .score-chart-headline .headline-delta.down{color:var(--delta-down);}
+  .scores-chart-wrap{position:relative;}
+  .score-svg{width:100%; height:150px; display:block; overflow:visible;}
+  .scores-grid-line{stroke:var(--line); stroke-width:1; stroke-dasharray:3 3;}
+  .scores-axis-label{font-size:9px; fill:var(--muted);}
+  .scores-tick-label{font-size:9px; fill:var(--muted); text-anchor:middle;}
+  .scores-series-line{fill:none; stroke-width:2.5; vector-effect:non-scaling-stroke;}
+  .scores-point{stroke:var(--surface); stroke-width:2; vector-effect:non-scaling-stroke; cursor:pointer;}
+  .scores-direct-label{font-size:10px; font-weight:700; font-variant-numeric:tabular-nums; text-anchor:middle;}
+  .scores-tooltip{
+    position:absolute; pointer-events:none; z-index:2; transform:translate(-50%,-100%);
+    background:var(--text); color:var(--bg); font-size:11px; font-weight:700;
+    padding:5px 9px; border-radius:7px; white-space:nowrap; margin-top:-8px;
+  }
+
+  .exam-add-btn-sm{
+    flex-shrink:0; appearance:none; cursor:pointer; font:inherit; font-size:13px; font-weight:700;
+    color:var(--accent-fg); background:var(--accent); border:1px solid var(--accent);
+    border-radius:999px; padding:8px 14px;
+  }
+  .exam-subject-tabs{display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;}
+  .exam-subject-tab{
+    appearance:none; cursor:pointer; font:inherit; font-size:13px; font-weight:700; color:var(--text);
+    background:var(--surface-2); border:1px solid var(--line); border-radius:999px; padding:8px 14px;
+  }
+  .exam-subject-tab[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:var(--accent-fg);}
+  .exam-add-form{display:flex; gap:8px; margin-top:12px;}
+  .exam-date-input{
+    flex:1; min-width:0; font:inherit; font-size:13px; color:var(--text);
+    background:var(--surface-2); border:1px solid var(--line); border-radius:10px; padding:10px 8px;
+  }
+  .exam-score-input{
+    width:84px; flex-shrink:0; font:inherit; font-size:14px; color:var(--text); text-align:center;
+    background:var(--surface-2); border:1px solid var(--line); border-radius:10px; padding:10px 6px;
+  }
+  .exam-add-confirm-btn{
+    flex-shrink:0; appearance:none; cursor:pointer; font:inherit; font-size:14px; font-weight:700;
+    color:var(--accent-fg); background:var(--accent); border:1px solid var(--accent); border-radius:10px; padding:10px 16px;
+  }
+  .exam-list{display:flex; flex-direction:column; gap:2px; margin-top:14px;}
+  .exam-item{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:13px 2px; border-top:1px solid var(--line);}
+  .exam-item:first-child{border-top:none;}
+  .exam-item-label{font-size:14px; font-weight:700;}
+  .exam-item-date{font-size:12px; color:var(--muted); margin-top:2px;}
+  .exam-item-right{display:flex; align-items:center; gap:8px; flex-shrink:0;}
+  .exam-item-delta{font-size:12px; font-weight:700; color:var(--delta-up);}
+  .exam-item-delta.down{color:var(--delta-down);}
+  .exam-item-score{font-size:20px; font-weight:800; font-variant-numeric:tabular-nums;}
+  .exam-item-score .unit{font-size:12px; font-weight:600; color:var(--muted); margin-left:1px;}
+  .exam-del{flex-shrink:0; appearance:none; cursor:pointer; border:none; background:none; color:var(--muted); font-size:16px; padding:2px 4px; line-height:1;}
+</style>
+
+<div id="app">
+  <div class="topbar">
+    <div class="topbar-row">
+      <div class="brand">
+        <h1>임용 스터디</h1>
+        <span class="dday-chip" id="header-dday">D-​</span>
+      </div>
+    </div>
+    <div class="tabs" role="tablist">
+      <button class="tab-btn" role="tab" aria-selected="true" data-tab="dashboard">대시보드</button>
+      <button class="tab-btn" role="tab" aria-selected="false" data-tab="subjects">과목 관리</button>
+      <button class="tab-btn" role="tab" aria-selected="false" data-tab="scores">모의고사</button>
+    </div>
+  </div>
+
+  <main>
+    <section class="tab-panel" id="tab-dashboard">
+      <div class="dashboard-col">
+        <div class="card dday-card">
+          <h2>D-DAY</h2>
+          <div class="dday-num" id="dday-number">D-​</div>
+          <div class="dday-label"><b>임용고시 1차 필기시험</b> · <span id="dday-date"></span></div>
+          <button class="upcoming-toggle" id="upcoming-toggle" aria-expanded="false">다가오는 일정 보기</button>
+
+          <div id="upcoming-card" hidden>
+            <div class="card-divider"></div>
+            <h2>다가오는 일정</h2>
+            <div class="upcoming-list" id="upcoming-list"></div>
+          </div>
+        </div>
+
+        <div class="card timer-card">
+          <div class="card-header-row">
+            <h2>카운트다운</h2>
+            <span class="card-count-badge">모의고사용</span>
+          </div>
+          <select id="timer-subject"></select>
+          <div class="preset-row">
+            <button class="preset-btn" data-min="60" aria-pressed="true">60분</button>
+            <button class="preset-btn" data-min="90" aria-pressed="false">90분</button>
+            <button class="preset-btn" data-min="custom" aria-pressed="false">직접입력</button>
+          </div>
+          <input class="custom-minutes" id="custom-minutes" type="number" min="1" max="300"
+                 placeholder="분 단위로 입력" hidden>
+          <div class="timer-display" id="timer-display">60:00</div>
+          <div class="timer-done-msg" id="timer-done-msg"></div>
+          <div class="timer-actions">
+            <button id="timer-start">시작</button>
+            <button id="timer-reset">초기화</button>
+          </div>
+        </div>
+
+        <div class="card today-card">
+          <h2>오늘 공부</h2>
+          <div class="today-num">
+            <span class="value" id="today-hours">0.0</span>
+            <span class="unit">/ 8h</span>
+          </div>
+          <div class="progress-track"><div class="progress-fill" id="today-fill" style="width:0%"></div></div>
+          <div class="today-sub" id="today-sub"></div>
+        </div>
+
+        <div class="card week-card">
+          <h2>이번 주</h2>
+          <div class="week-total" id="week-total"></div>
+          <div class="week-chart" id="week-chart"></div>
+        </div>
+
+      </div>
+
+      <div class="dashboard-col">
+        <div class="card stopwatch-card">
+          <div class="card-header-row">
+            <h2>타이머</h2>
+            <span class="card-count-badge">공부시간기록</span>
+          </div>
+          <select id="stopwatch-subject"></select>
+          <input class="stopwatch-memo" id="stopwatch-memo" type="text" placeholder="메모 (선택)" maxlength="40">
+          <div class="stopwatch-display" id="stopwatch-display">00:00:00</div>
+          <button class="stopwatch-btn" id="stopwatch-btn" aria-pressed="false">시작</button>
+
+          <div class="card-divider"></div>
+          <h2>오늘의 과목별 학습시간</h2>
+          <div class="subjects-list" id="dash-subjects-list"></div>
+        </div>
+
+        <div class="card todo-card">
+          <div class="card-header-row">
+            <h2>할 일</h2>
+            <span class="card-count-badge" id="todo-progress"></span>
+          </div>
+          <div class="todo-add-row">
+            <select class="todo-subject-select" id="todo-subject"></select>
+            <input class="todo-input" id="todo-input" type="text" placeholder="추가..." maxlength="60">
+            <button class="todo-add-btn" id="todo-add-btn">+</button>
+          </div>
+          <div class="todo-list" id="todo-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="tab-panel" id="tab-subjects" hidden>
+      <div class="dashboard-col">
+        <div class="card subjects-card">
+          <h2>오늘의 과목별 학습시간</h2>
+          <div class="subjects-list" id="subjects-list"></div>
+        </div>
+      </div>
+      <div class="dashboard-col" id="subject-stat-cards"></div>
+    </section>
+
+    <section class="tab-panel" id="tab-scores" hidden>
+      <div class="card score-chart-card" data-subject="edu">
+        <div class="score-chart-header">
+          <div class="score-chart-title"><span class="scores-legend-dot" style="background:var(--subj-edu)"></span>교육학</div>
+          <div class="score-chart-headline" id="score-headline-edu"></div>
+        </div>
+        <div class="scores-chart-wrap"><svg class="score-svg" id="score-svg-edu"></svg><div class="scores-tooltip" hidden></div></div>
+      </div>
+
+      <div class="card score-chart-card" data-subject="p1">
+        <div class="score-chart-header">
+          <div class="score-chart-title"><span class="scores-legend-dot" style="background:var(--subj-p1)"></span>전공 1교시</div>
+          <div class="score-chart-headline" id="score-headline-p1"></div>
+        </div>
+        <div class="scores-chart-wrap"><svg class="score-svg" id="score-svg-p1"></svg><div class="scores-tooltip" hidden></div></div>
+      </div>
+
+      <div class="card score-chart-card" data-subject="p2">
+        <div class="score-chart-header">
+          <div class="score-chart-title"><span class="scores-legend-dot" style="background:var(--subj-p2)"></span>전공 2교시</div>
+          <div class="score-chart-headline" id="score-headline-p2"></div>
+        </div>
+        <div class="scores-chart-wrap"><svg class="score-svg" id="score-svg-p2"></svg><div class="scores-tooltip" hidden></div></div>
+      </div>
+
+      <div class="card span-2 scores-record-card">
+        <div class="card-header-row">
+          <h2>회차별 기록</h2>
+          <button class="exam-add-btn-sm" id="exam-add-btn">+ 점수 입력</button>
+        </div>
+        <div class="exam-subject-tabs" id="exam-subject-tabs"></div>
+        <div class="exam-add-form" id="exam-add-form" hidden>
+          <input class="exam-date-input" id="exam-date" type="date">
+          <input class="exam-score-input" id="exam-score" type="number" min="0" max="100" placeholder="점수">
+          <button class="exam-add-confirm-btn" id="exam-add-confirm">추가</button>
+        </div>
+        <div class="exam-list" id="exam-list"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+(function(){
+  // ---- 하드코딩된 시험 일정 (1인 맞춤이라 설정 화면 없이 코드에 직접 기록) ----
+  var EXAM_DATES = [
+    { key:'reg-start', name:'원서접수 시작', date:'2026-10-12' },
+    { key:'reg-end',   name:'원서접수 마감', date:'2026-10-16' },
+    { key:'written',   name:'1차 필기시험', date:'2026-11-28' }
+  ];
+  var MAIN_EXAM_KEY = 'written';
+
+  function todayMidnight(){
+    var d = new Date();
+    d.setHours(0,0,0,0);
+    return d;
+  }
+  function parseDate(s){
+    var p = s.split('-').map(Number);
+    return new Date(p[0], p[1]-1, p[2]);
+  }
+  function daysUntil(dateStr, today){
+    var target = parseDate(dateStr);
+    var ms = target - today;
+    return Math.round(ms / 86400000);
+  }
+  function formatKDate(dateStr){
+    var d = parseDate(dateStr);
+    return d.getFullYear() + '년 ' + (d.getMonth()+1) + '월 ' + d.getDate() + '일';
+  }
+  function formatShortDate(dateStr){
+    var d = parseDate(dateStr);
+    return (d.getMonth()+1) + '/' + d.getDate();
+  }
+  function ddayLabel(n){
+    if(n === 0) return 'D-DAY';
+    if(n > 0) return 'D-' + n;
+    return 'D+' + (-n);
+  }
+
+  function render(){
+    var today = todayMidnight();
+    var main = EXAM_DATES.filter(function(e){ return e.key === MAIN_EXAM_KEY; })[0];
+    var mainDays = daysUntil(main.date, today);
+
+    document.getElementById('header-dday').textContent = ddayLabel(mainDays);
+    document.getElementById('dday-number').textContent = ddayLabel(mainDays);
+    document.getElementById('dday-date').textContent = formatKDate(main.date);
+
+    var upcoming = EXAM_DATES
+      .filter(function(e){ return e.key !== MAIN_EXAM_KEY; }) // 1차 필기는 D-DAY 카드에 이미 나오니 목록에서 제외
+      .map(function(e){ return { e:e, days: daysUntil(e.date, today) }; })
+      .filter(function(x){ return x.days >= 0; })
+      .sort(function(a,b){ return a.days - b.days; });
+
+    var list = document.getElementById('upcoming-list');
+    list.innerHTML = '';
+    if(upcoming.length === 0){
+      var empty = document.createElement('div');
+      empty.className = 'placeholder';
+      empty.innerHTML = '<span>등록된 다가오는 일정이 없어요.</span>';
+      list.appendChild(empty);
+      return;
+    }
+    upcoming.forEach(function(x){
+      var row = document.createElement('div');
+      row.className = 'upcoming-item';
+      var badgeClass = x.days === 0 ? 'badge today' : 'badge';
+      row.innerHTML =
+        '<div><div class="name">' + x.e.name + '</div><div class="date">' + formatKDate(x.e.date) + '</div></div>' +
+        '<div class="' + badgeClass + '">' + ddayLabel(x.days) + '</div>';
+      list.appendChild(row);
+    });
+  }
+
+  // ---- 과목 (1인 맞춤이라 코드에 직접 기록) ----
+  var SUBJECTS = [
+    { key:'edu', label:'교육학',     var:'--subj-edu', totalGoal:200 },
+    { key:'p1',  label:'전공 1교시', var:'--subj-p1',  totalGoal:250 },
+    { key:'p2',  label:'전공 2교시', var:'--subj-p2',  totalGoal:220 }
+  ];
+  var DAILY_GOAL_HOURS = 8;
+  var STORAGE_KEY = 'imyongstudy.v1';
+  var refreshScoresChart = function(){}; // 모의고사 탭이 보일 때 다시 그릴 수 있도록 나중에 교체됨
+
+  function loadState(){
+    try{
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if(!raw) return { studyLog: [], todos: [], mockExams: [] };
+      var parsed = JSON.parse(raw);
+      if(!parsed || !Array.isArray(parsed.studyLog)) parsed = { studyLog: [] };
+      if(!Array.isArray(parsed.todos)) parsed.todos = [];
+      if(!Array.isArray(parsed.mockExams)) parsed.mockExams = [];
+      return parsed;
+    }catch(e){
+      return { studyLog: [], todos: [], mockExams: [] };
+    }
+  }
+  function saveState(state){
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+    catch(e){ /* 저장 실패해도 앱은 계속 동작 */ }
+  }
+  function dateToStr(d){
+    var mm = String(d.getMonth()+1).padStart(2,'0');
+    var dd = String(d.getDate()).padStart(2,'0');
+    return d.getFullYear() + '-' + mm + '-' + dd;
+  }
+  function todayStr(){
+    return dateToStr(new Date());
+  }
+  function getMonday(d){
+    var m = new Date(d);
+    m.setHours(0,0,0,0);
+    var day = m.getDay(); // 0=일 .. 6=토
+    var diff = day === 0 ? -6 : 1 - day; // 월요일로 이동
+    m.setDate(m.getDate() + diff);
+    return m;
+  }
+
+  var appState = loadState();
+
+  function renderToday(){
+    var minutes = appState.studyLog
+      .filter(function(e){ return e.date === todayStr(); })
+      .reduce(function(sum,e){ return sum + e.minutes; }, 0);
+    var hours = minutes / 60;
+    var pct = Math.min(100, (hours / DAILY_GOAL_HOURS) * 100);
+    document.getElementById('today-hours').textContent = hours.toFixed(1);
+    document.getElementById('today-fill').style.width = pct + '%';
+    var remain = DAILY_GOAL_HOURS - hours;
+    document.getElementById('today-sub').textContent =
+      remain <= 0 ? '오늘 목표를 채웠어요' : '목표까지 ' + remain.toFixed(1) + 'h 남음';
+  }
+
+  var WEEK_DAY_LABELS = ['월','화','수','목','금','토','일'];
+
+  function formatWeekBarLabel(hoursFloat){
+    var totalMinutes = Math.round(hoursFloat * 60);
+    if (totalMinutes < 60) return totalMinutes + 'm';
+    var h = totalMinutes / 60;
+    return (h % 1 === 0 ? h : h.toFixed(1)) + 'h';
+  }
+
+  function renderWeek(){
+    var monday = getMonday(new Date());
+    var todayKey = todayStr();
+    var days = [];
+    for(var i=0;i<7;i++){
+      var d = new Date(monday);
+      d.setDate(d.getDate() + i);
+      days.push(dateToStr(d));
+    }
+    var minutesByDay = days.map(function(ds){
+      return appState.studyLog
+        .filter(function(e){ return e.date === ds; })
+        .reduce(function(sum,e){ return sum + e.minutes; }, 0);
+    });
+    var hoursByDay = minutesByDay.map(function(m){ return m / 60; });
+    var totalHours = hoursByDay.reduce(function(a,b){ return a+b; }, 0);
+    var maxHours = Math.max.apply(null, hoursByDay.concat([1])); // 0으로 나누기 방지
+
+    document.getElementById('week-total').textContent =
+      '이번 주 합계 ' + totalHours.toFixed(1) + 'h';
+
+    var chart = document.getElementById('week-chart');
+    chart.innerHTML = '';
+    days.forEach(function(ds, i){
+      var isToday = ds === todayKey;
+      var col = document.createElement('div');
+      col.className = 'week-bar-col';
+      var pct = Math.max(4, (hoursByDay[i] / maxHours) * 100);
+      col.innerHTML =
+        '<div class="week-bar-value' + (isToday ? ' today' : '') + '">' + formatWeekBarLabel(hoursByDay[i]) + '</div>' +
+        '<div class="week-bar-track"><div class="week-bar' + (isToday ? ' today' : '') + '" style="height:' + pct + '%"></div></div>' +
+        '<div class="week-day-label' + (isToday ? ' today' : '') + '">' + WEEK_DAY_LABELS[i] + '</div>';
+      chart.appendChild(col);
+    });
+  }
+
+  function formatHM(hoursFloat){
+    var totalMinutes = Math.round(hoursFloat * 60);
+    var h = Math.floor(totalMinutes / 60);
+    var m = totalMinutes % 60;
+    return h + 'h ' + m + 'm';
+  }
+
+  function computeSubjectStats(){
+    return SUBJECTS.map(function(s){
+      var allMinutes = appState.studyLog
+        .filter(function(e){ return e.subject === s.key; })
+        .reduce(function(sum,e){ return sum + e.minutes; }, 0);
+      var allHours = allMinutes / 60;
+      var pct = Math.min(100, (allHours / s.totalGoal) * 100);
+      return { s: s, allHours: allHours, pct: pct };
+    });
+  }
+
+  function computeTodaySubjectStats(){
+    var todayKey = todayStr();
+    var raw = SUBJECTS.map(function(s){
+      var todayMinutes = appState.studyLog
+        .filter(function(e){ return e.subject === s.key && e.date === todayKey; })
+        .reduce(function(sum,e){ return sum + e.minutes; }, 0);
+      return { s: s, todayMinutes: todayMinutes };
+    });
+    var maxMinutes = Math.max.apply(null, raw.map(function(r){ return r.todayMinutes; }).concat([1]));
+    return raw.map(function(r){
+      return {
+        s: r.s,
+        todayHours: r.todayMinutes / 60,
+        pct: Math.min(100, (r.todayMinutes / maxMinutes) * 100)
+      };
+    });
+  }
+
+  function buildDashSubjectsHTML(stats){
+    return stats.map(function(st){
+      var s = st.s;
+      return '<div class="subj-row">' +
+        '<div class="subj-row-top">' +
+          '<span class="subj-dot" style="background:var(' + s.var + ')"></span>' +
+          '<span class="subj-name">' + s.label + '</span>' +
+          '<span class="subj-time-big" style="color:var(' + s.var + ')">' + formatHM(st.todayHours) + '</span>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function buildSubjectStatCardsHTML(stats){
+    return stats.map(function(st){
+      var s = st.s;
+      return '<div class="card subject-stat-card">' +
+        '<div class="subject-stat-header"><span class="subj-dot" style="background:var(' + s.var + ')"></span>' + s.label + '</div>' +
+        '<div class="subject-stat-row">' +
+          '<div class="subject-stat-tile">' +
+            '<span class="tile-label">학습시간</span>' +
+            '<div class="tile-value" style="color:var(' + s.var + ')">' + formatHM(st.allHours) + '</div>' +
+            '<div class="tile-sub">목표 ' + s.totalGoal + 'h</div>' +
+          '</div>' +
+          '<div class="subject-stat-tile">' +
+            '<span class="tile-label">달성률</span>' +
+            '<div class="tile-value" style="color:var(' + s.var + ')">' + Math.round(st.pct) + '%</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function renderSubjects(){
+    var stats = computeSubjectStats();
+    var todayStats = computeTodaySubjectStats();
+    var tabList = document.getElementById('subjects-list');
+    if(tabList) tabList.innerHTML = buildDashSubjectsHTML(todayStats);
+    var dashList = document.getElementById('dash-subjects-list');
+    if(dashList) dashList.innerHTML = buildDashSubjectsHTML(todayStats);
+    var statCards = document.getElementById('subject-stat-cards');
+    if(statCards) statCards.innerHTML = buildSubjectStatCardsHTML(stats);
+  }
+
+  function logStudy(minutes, subjectKey, memo){
+    appState.studyLog.push({ date: todayStr(), minutes: minutes, subject: subjectKey, memo: memo || '' });
+    saveState(appState);
+    renderToday();
+    renderWeek();
+    renderSubjects();
+  }
+
+  // ---- 카운트다운 타이머 ----
+  (function(){
+    var subjectSelect = document.getElementById('timer-subject');
+    SUBJECTS.forEach(function(s){
+      var opt = document.createElement('option');
+      opt.value = s.key; opt.textContent = s.label;
+      subjectSelect.appendChild(opt);
+    });
+
+    var presetButtons = document.querySelectorAll('.preset-btn');
+    var customInput = document.getElementById('custom-minutes');
+    var display = document.getElementById('timer-display');
+    var startBtn = document.getElementById('timer-start');
+    var resetBtn = document.getElementById('timer-reset');
+    var doneMsg = document.getElementById('timer-done-msg');
+
+    var presetMinutes = 60;
+    var remainingSeconds = presetMinutes * 60;
+    var intervalId = null;
+    var running = false;
+
+    function formatTime(totalSeconds){
+      var m = Math.floor(totalSeconds / 60);
+      var s = totalSeconds % 60;
+      return String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+    }
+    function updateDisplay(){
+      display.textContent = formatTime(Math.max(0, remainingSeconds));
+    }
+    function setPreset(minutes){
+      presetMinutes = minutes;
+      remainingSeconds = minutes * 60;
+      updateDisplay();
+    }
+    function stopInterval(){
+      if(intervalId){ clearInterval(intervalId); intervalId = null; }
+      running = false;
+      startBtn.textContent = '시작';
+    }
+
+    presetButtons.forEach(function(btn){
+      btn.addEventListener('click', function(){
+        if(running) return; // 타이머 도는 중엔 프리셋 변경 막기
+        presetButtons.forEach(function(b){ b.setAttribute('aria-pressed','false'); });
+        btn.setAttribute('aria-pressed','true');
+        doneMsg.textContent = '';
+        if(btn.dataset.min === 'custom'){
+          customInput.hidden = false;
+          customInput.focus();
+          setPreset(Number(customInput.value) || 1);
+        } else {
+          customInput.hidden = true;
+          setPreset(Number(btn.dataset.min));
+        }
+      });
+    });
+    customInput.addEventListener('input', function(){
+      if(running) return;
+      var v = Math.max(1, Math.min(300, Number(customInput.value) || 1));
+      setPreset(v);
+    });
+
+    startBtn.addEventListener('click', function(){
+      if(running){
+        stopInterval();
+        return;
+      }
+      if(remainingSeconds <= 0){ setPreset(presetMinutes); }
+      running = true;
+      startBtn.textContent = '일시정지';
+      doneMsg.textContent = '';
+      intervalId = setInterval(function(){
+        remainingSeconds -= 1;
+        updateDisplay();
+        if(remainingSeconds <= 0){
+          stopInterval();
+          logStudy(presetMinutes, subjectSelect.value);
+          doneMsg.textContent = presetMinutes + '분 공부 완료! 기록에 반영됐어요.';
+        }
+      }, 1000);
+    });
+
+    resetBtn.addEventListener('click', function(){
+      stopInterval();
+      doneMsg.textContent = '';
+      setPreset(presetMinutes);
+    });
+
+    updateDisplay();
+    renderToday();
+    renderWeek();
+    renderSubjects();
+  })();
+
+  // ---- 타이머 (스톱워치: 누른 시점부터 경과시간을 올려 세다가 정지하면 바로 기록) ----
+  (function(){
+    var subjectSelect = document.getElementById('stopwatch-subject');
+    SUBJECTS.forEach(function(s){
+      var opt = document.createElement('option');
+      opt.value = s.key; opt.textContent = s.label;
+      subjectSelect.appendChild(opt);
+    });
+
+    var memoInput = document.getElementById('stopwatch-memo');
+    var display = document.getElementById('stopwatch-display');
+    var btn = document.getElementById('stopwatch-btn');
+
+    var elapsedSeconds = 0;
+    var intervalId = null;
+    var running = false;
+
+    function formatElapsed(totalSeconds){
+      var h = Math.floor(totalSeconds / 3600);
+      var m = Math.floor((totalSeconds % 3600) / 60);
+      var s = totalSeconds % 60;
+      return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+    }
+    function updateDisplay(){
+      display.textContent = formatElapsed(elapsedSeconds);
+    }
+
+    btn.addEventListener('click', function(){
+      if(running){
+        clearInterval(intervalId);
+        intervalId = null;
+        running = false;
+        btn.textContent = '시작';
+        btn.setAttribute('aria-pressed', 'false');
+        var minutes = Math.round(elapsedSeconds / 60);
+        if(minutes > 0){
+          logStudy(minutes, subjectSelect.value, memoInput.value.trim());
+        }
+        elapsedSeconds = 0;
+        updateDisplay();
+        memoInput.value = '';
+      } else {
+        running = true;
+        btn.textContent = '정지';
+        btn.setAttribute('aria-pressed', 'true');
+        intervalId = setInterval(function(){
+          elapsedSeconds += 1;
+          updateDisplay();
+        }, 1000);
+      }
+    });
+
+    updateDisplay();
+  })();
+
+  // ---- 할 일 체크리스트 ----
+  (function(){
+    var subjectSelect = document.getElementById('todo-subject');
+    var noneOpt = document.createElement('option');
+    noneOpt.value = ''; noneOpt.textContent = '태그 없음';
+    subjectSelect.appendChild(noneOpt);
+    SUBJECTS.forEach(function(s){
+      var opt = document.createElement('option');
+      opt.value = s.key; opt.textContent = s.label;
+      subjectSelect.appendChild(opt);
+    });
+
+    var input = document.getElementById('todo-input');
+    var addBtn = document.getElementById('todo-add-btn');
+    var list = document.getElementById('todo-list');
+    var progress = document.getElementById('todo-progress');
+
+    function subjectLabel(key){
+      var found = SUBJECTS.filter(function(s){ return s.key === key; })[0];
+      return found ? found.label : '';
+    }
+
+    function renderTodos(){
+      var total = appState.todos.length;
+      var done = appState.todos.filter(function(t){ return t.done; }).length;
+      progress.textContent = done + '/' + total;
+
+      list.innerHTML = '';
+      appState.todos.forEach(function(t){
+        var row = document.createElement('div');
+        row.className = 'todo-item' + (t.done ? ' done' : '');
+        row.dataset.id = t.id;
+        row.innerHTML =
+          '<input type="checkbox"' + (t.done ? ' checked' : '') + '>' +
+          '<span class="todo-text"></span>' +
+          (t.subject ? '<span class="todo-tag"></span>' : '') +
+          '<button class="todo-del" aria-label="삭제">×</button>';
+        row.querySelector('.todo-text').textContent = t.text;
+        if(t.subject){ row.querySelector('.todo-tag').textContent = subjectLabel(t.subject); }
+        list.appendChild(row);
+      });
+    }
+
+    function addTodo(){
+      var text = input.value.trim();
+      if(!text) return;
+      appState.todos.push({
+        id: Date.now() + '-' + Math.random().toString(36).slice(2,7),
+        text: text,
+        subject: subjectSelect.value,
+        done: false
+      });
+      saveState(appState);
+      input.value = '';
+      renderTodos();
+    }
+
+    addBtn.addEventListener('click', addTodo);
+    input.addEventListener('keydown', function(e){
+      if(e.key === 'Enter') addTodo();
+    });
+
+    list.addEventListener('click', function(e){
+      var row = e.target.closest('.todo-item');
+      if(!row) return;
+      var id = row.dataset.id;
+      if(e.target.matches('input[type="checkbox"]')){
+        var item = appState.todos.filter(function(t){ return t.id === id; })[0];
+        if(item){ item.done = !item.done; saveState(appState); renderTodos(); }
+      } else if(e.target.classList.contains('todo-del')){
+        appState.todos = appState.todos.filter(function(t){ return t.id !== id; });
+        saveState(appState);
+        renderTodos();
+      }
+    });
+
+    renderTodos();
+  })();
+
+  // ---- 모의고사: 과목(교시)별 성적 추이 카드 + 회차별 기록 ----
+  (function(){
+    var svgNS = 'http://www.w3.org/2000/svg';
+    var subjectTabsEl = document.getElementById('exam-subject-tabs');
+    var listEl = document.getElementById('exam-list');
+    var addBtn = document.getElementById('exam-add-btn');
+    var addForm = document.getElementById('exam-add-form');
+    var dateInput = document.getElementById('exam-date');
+    var scoreInput = document.getElementById('exam-score');
+    var addConfirmBtn = document.getElementById('exam-add-confirm');
+
+    var activeSubject = SUBJECTS[0].key;
+
+    function subjectByKey(key){
+      return SUBJECTS.filter(function(s){ return s.key === key; })[0];
+    }
+    function subjectColor(key){
+      return getComputedStyle(document.documentElement).getPropertyValue(subjectByKey(key).var).trim();
+    }
+    function recordsForSubject(key){
+      return appState.mockExams
+        .filter(function(r){ return r.subject === key; })
+        .sort(function(a,b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+    }
+
+    function renderChart(key){
+      var svg = document.getElementById('score-svg-' + key);
+      var wrap = svg.parentElement;
+      var tooltip = wrap.querySelector('.scores-tooltip');
+      var headline = document.getElementById('score-headline-' + key);
+      var color = subjectColor(key);
+
+      var records = recordsForSubject(key);
+      var W = wrap.clientWidth || 260;
+      var H = 150;
+      svg.setAttribute('width', W);
+      svg.setAttribute('height', H);
+      svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+      svg.innerHTML = '';
+      tooltip.hidden = true;
+
+      if(records.length === 0){
+        headline.innerHTML = '';
+        var msg = document.createElementNS(svgNS, 'text');
+        msg.setAttribute('x', W / 2); msg.setAttribute('y', H / 2);
+        msg.setAttribute('text-anchor', 'middle');
+        msg.setAttribute('class', 'scores-tick-label');
+        msg.textContent = '점수를 추가하면 추이가 표시돼요';
+        svg.appendChild(msg);
+        return;
+      }
+
+      var last = records[records.length - 1];
+      var prev = records.length > 1 ? records[records.length - 2] : null;
+      var hDelta = prev ? last.score - prev.score : null;
+      headline.style.color = color;
+      headline.innerHTML = '<span>' + last.score + '점</span>' +
+        (hDelta !== null && hDelta !== 0
+          ? '<span class="headline-delta' + (hDelta < 0 ? ' down' : '') + '">' + (hDelta > 0 ? '▲' : '▼') + Math.abs(hDelta) + '</span>'
+          : '');
+
+      var padL = 26, padR = 8, padT = 22, padB = 18;
+      var plotW = Math.max(10, W - padL - padR);
+      var plotH = H - padT - padB;
+
+      var scores = records.map(function(r){ return r.score; });
+      var minScore = Math.min.apply(null, scores);
+      var maxScore = Math.max.apply(null, scores);
+      var pad = Math.max(5, Math.round((maxScore - minScore) * 0.25));
+      var domainMin = Math.max(0, Math.floor((minScore - pad) / 5) * 5);
+      var domainMax = Math.min(100, Math.ceil((maxScore + pad) / 5) * 5);
+      if(domainMax - domainMin < 10){ domainMax = Math.min(100, domainMin + 10); }
+
+      var n = records.length;
+      var xStep = n > 1 ? plotW / (n - 1) : 0;
+      function xAt(i){ return padL + (n > 1 ? i * xStep : plotW / 2); }
+      function yAt(score){ return padT + (domainMax - score) / (domainMax - domainMin) * plotH; }
+
+      [domainMin, (domainMin + domainMax) / 2, domainMax].forEach(function(v){
+        var y = yAt(v);
+        var line = document.createElementNS(svgNS, 'line');
+        line.setAttribute('x1', padL); line.setAttribute('x2', W - padR);
+        line.setAttribute('y1', y); line.setAttribute('y2', y);
+        line.setAttribute('class', 'scores-grid-line');
+        svg.appendChild(line);
+        var label = document.createElementNS(svgNS, 'text');
+        label.setAttribute('x', padL - 6); label.setAttribute('y', y + 3);
+        label.setAttribute('text-anchor', 'end');
+        label.setAttribute('class', 'scores-axis-label');
+        label.textContent = Math.round(v);
+        svg.appendChild(label);
+      });
+
+      var maxTicks = Math.max(2, Math.floor(plotW / 30));
+      var tickStep = Math.max(1, Math.ceil(n / maxTicks));
+      records.forEach(function(r, i){
+        if(i % tickStep !== 0 && i !== n - 1) return;
+        var label = document.createElementNS(svgNS, 'text');
+        label.setAttribute('x', xAt(i)); label.setAttribute('y', H - 4);
+        label.setAttribute('class', 'scores-tick-label');
+        label.textContent = (i + 1) + '회';
+        svg.appendChild(label);
+      });
+
+      var gradId = 'score-grad-' + key;
+      var defs = document.createElementNS(svgNS, 'defs');
+      var grad = document.createElementNS(svgNS, 'linearGradient');
+      grad.setAttribute('id', gradId);
+      grad.setAttribute('x1', '0'); grad.setAttribute('y1', '0');
+      grad.setAttribute('x2', '0'); grad.setAttribute('y2', '1');
+      var stop1 = document.createElementNS(svgNS, 'stop');
+      stop1.setAttribute('offset', '0%'); stop1.setAttribute('stop-color', color); stop1.setAttribute('stop-opacity', '0.3');
+      var stop2 = document.createElementNS(svgNS, 'stop');
+      stop2.setAttribute('offset', '100%'); stop2.setAttribute('stop-color', color); stop2.setAttribute('stop-opacity', '0.02');
+      grad.appendChild(stop1); grad.appendChild(stop2);
+      defs.appendChild(grad);
+      svg.appendChild(defs);
+
+      var linePts = records.map(function(r, i){ return xAt(i) + ',' + yAt(r.score); });
+      var baseline = padT + plotH;
+      var areaPts = linePts.slice();
+      areaPts.push(xAt(n - 1) + ',' + baseline);
+      areaPts.push(xAt(0) + ',' + baseline);
+
+      var area = document.createElementNS(svgNS, 'polygon');
+      area.setAttribute('points', areaPts.join(' '));
+      area.setAttribute('fill', 'url(#' + gradId + ')');
+      svg.appendChild(area);
+
+      var poly = document.createElementNS(svgNS, 'polyline');
+      poly.setAttribute('points', linePts.join(' '));
+      poly.setAttribute('class', 'scores-series-line');
+      poly.setAttribute('stroke', color);
+      svg.appendChild(poly);
+
+      records.forEach(function(r, i){
+        var cx = xAt(i), cy = yAt(r.score);
+        var circle = document.createElementNS(svgNS, 'circle');
+        circle.setAttribute('cx', cx); circle.setAttribute('cy', cy); circle.setAttribute('r', 4);
+        circle.setAttribute('class', 'scores-point');
+        circle.setAttribute('fill', color);
+        circle.addEventListener('pointerenter', function(){
+          tooltip.hidden = false;
+          tooltip.style.left = cx + 'px';
+          tooltip.style.top = cy + 'px';
+          tooltip.textContent = (i + 1) + '회 · ' + formatShortDate(r.date) + ' · ' + r.score + '점';
+        });
+        circle.addEventListener('pointerleave', function(){ tooltip.hidden = true; });
+        svg.appendChild(circle);
+
+        var plabel = document.createElementNS(svgNS, 'text');
+        plabel.setAttribute('x', cx); plabel.setAttribute('y', Math.max(10, cy - 9));
+        plabel.setAttribute('class', 'scores-direct-label');
+        plabel.setAttribute('fill', color);
+        plabel.textContent = r.score;
+        svg.appendChild(plabel);
+      });
+    }
+
+    function renderAllCharts(){
+      SUBJECTS.forEach(function(s){ renderChart(s.key); });
+    }
+
+    function renderList(){
+      var color = subjectColor(activeSubject);
+      var records = recordsForSubject(activeSubject);
+      if(records.length === 0){
+        listEl.innerHTML = '<div class="placeholder"><span>아직 등록된 모의고사 기록이 없어요.</span></div>';
+        return;
+      }
+      var desc = records.slice().reverse();
+      listEl.innerHTML = '';
+      desc.forEach(function(r){
+        var ascIdx = records.indexOf(r);
+        var ordinal = ascIdx + 1;
+        var prev = ascIdx > 0 ? records[ascIdx - 1] : null;
+        var delta = prev ? r.score - prev.score : null;
+        var row = document.createElement('div');
+        row.className = 'exam-item';
+        row.dataset.id = r.id;
+        var deltaHtml = (delta !== null && delta !== 0)
+          ? '<span class="exam-item-delta' + (delta < 0 ? ' down' : '') + '">' + (delta > 0 ? '▲' : '▼') + Math.abs(delta) + '</span>'
+          : '';
+        row.innerHTML =
+          '<div><div class="exam-item-label">' + ordinal + '회 모의고사</div><div class="exam-item-date">' + formatKDate(r.date) + '</div></div>' +
+          '<div class="exam-item-right">' + deltaHtml +
+            '<span class="exam-item-score" style="color:' + color + '">' + r.score + '<span class="unit">점</span></span>' +
+            '<button class="exam-del" aria-label="삭제">×</button>' +
+          '</div>';
+        listEl.appendChild(row);
+      });
+    }
+
+    function renderAll(){
+      renderAllCharts();
+      renderList();
+    }
+
+    subjectTabsEl.innerHTML = '';
+    SUBJECTS.forEach(function(s){
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'exam-subject-tab';
+      btn.textContent = s.label;
+      btn.setAttribute('aria-pressed', s.key === activeSubject ? 'true' : 'false');
+      btn.addEventListener('click', function(){
+        activeSubject = s.key;
+        Array.prototype.forEach.call(subjectTabsEl.children, function(b){ b.setAttribute('aria-pressed', 'false'); });
+        btn.setAttribute('aria-pressed', 'true');
+        addForm.hidden = true;
+        addBtn.textContent = '+ 점수 입력';
+        renderList();
+      });
+      subjectTabsEl.appendChild(btn);
+    });
+
+    addBtn.addEventListener('click', function(){
+      var willShow = addForm.hidden;
+      addForm.hidden = !willShow;
+      addBtn.textContent = willShow ? '취소' : '+ 점수 입력';
+      if(willShow){
+        dateInput.value = '';
+        scoreInput.value = '';
+        dateInput.focus();
+      }
+    });
+
+    addConfirmBtn.addEventListener('click', function(){
+      if(!dateInput.value){ dateInput.focus(); return; }
+      if(scoreInput.value === ''){ scoreInput.focus(); return; }
+      var score = Math.max(0, Math.min(100, Number(scoreInput.value)));
+      appState.mockExams.push({
+        id: Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+        subject: activeSubject,
+        date: dateInput.value,
+        score: score
+      });
+      saveState(appState);
+      addForm.hidden = true;
+      addBtn.textContent = '+ 점수 입력';
+      renderAll();
+    });
+
+    listEl.addEventListener('click', function(e){
+      if(!e.target.classList.contains('exam-del')) return;
+      var row = e.target.closest('.exam-item');
+      var id = row.dataset.id;
+      appState.mockExams = appState.mockExams.filter(function(r){ return r.id !== id; });
+      saveState(appState);
+      renderAll();
+    });
+
+    var resizeTimer = null;
+    window.addEventListener('resize', function(){
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(renderAllCharts, 150);
+    });
+
+    refreshScoresChart = renderAllCharts;
+    renderAll();
+  })();
+
+  // ---- 다가오는 일정 접기/펼치기 ----
+  var upcomingToggle = document.getElementById('upcoming-toggle');
+  var upcomingCard = document.getElementById('upcoming-card');
+  upcomingToggle.addEventListener('click', function(){
+    var willShow = upcomingCard.hidden;
+    upcomingCard.hidden = !willShow;
+    upcomingToggle.setAttribute('aria-expanded', String(willShow));
+    upcomingToggle.textContent = willShow ? '다가오는 일정 접기' : '다가오는 일정 보기';
+  });
+
+  // ---- 탭 전환 ----
+  var tabButtons = document.querySelectorAll('.tab-btn');
+  tabButtons.forEach(function(btn){
+    btn.addEventListener('click', function(){
+      tabButtons.forEach(function(b){ b.setAttribute('aria-selected','false'); });
+      btn.setAttribute('aria-selected','true');
+      document.querySelectorAll('.tab-panel').forEach(function(p){ p.hidden = true; });
+      document.getElementById('tab-' + btn.dataset.tab).hidden = false;
+      if(btn.dataset.tab === 'scores') refreshScoresChart();
+    });
+  });
+
+  render();
+})();
+</script>
+
+</html>
